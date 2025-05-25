@@ -2,20 +2,14 @@
 
 import { Button } from "@/components/ui/button"
 import { Sidebar, SidebarContent, SidebarGroup, SidebarMenu, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenuButton, SidebarMenuItem, useSidebar } from "@/components/ui/sidebar"
+import useProject from "@/hooks/use-project"
 import { cn } from "@/lib/utils"
 import { Bot, CreditCard, LayoutDashboard, Plus, Presentation } from "lucide-react"
 import Image from "next/image"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
-const projects = [
-    { id: "1", name: "Project Alpha" },
-    { id: "2", name: "Project Beta" },
-    { id: "3", name: "Project Gamma" },
 
-
-
-]
 const items = [
     {
         title: "Dashboard",
@@ -46,6 +40,7 @@ const items = [
 const AppSidebar = () => {
     const pathname = usePathname()
     const { open } = useSidebar();
+    const {projects, projectId, setProjectId}=useProject();
     return (
         <Sidebar collapsible="icon" variant="floating">
             <SidebarHeader>
@@ -83,23 +78,23 @@ const AppSidebar = () => {
                     <SidebarGroupLabel>Your Projects</SidebarGroupLabel>
                     <SidebarGroupContent>
                         <SidebarMenu>
-                            {projects.map(project => {
+                            {projects?.map(project => {
                                 return (
                                     <SidebarMenuItem key={project.name}>
                                         <SidebarMenuButton asChild>
-                                            <button className="flex items-center gap-2 w-full">
+                                            <div onClick={() => setProjectId(project.id)}>
                                                 <div
                                                     className={cn(
                                                         "flex size-6 items-center justify-center rounded-sm border bg-white text-sm text-primary",
                                                         {
-                                                            "bg-primary text-white": true,
+                                                            "bg-primary text-white":project.id===projectId
                                                         },
                                                     )}
                                                 >
                                                     {project.name[0]}
                                                 </div>
                                                 <span>{project.name}</span>
-                                            </button>
+                                            </div>
                                         </SidebarMenuButton>
                                     </SidebarMenuItem>
                                 );

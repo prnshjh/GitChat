@@ -1,20 +1,18 @@
-'use client'
-import { useUser } from '@clerk/nextjs'
+"use client";
+import useProject from "@/hooks/use-project";
+import { ExternalLink, Github} from "lucide-react";
+import Link from "next/link";
+import dynamic from "next/dynamic";
 
-import React from 'react'
+type Props = {};
 
-
-
-const DashboardPage = () => {
-  const {user}= useUser()
-  return ( <div>
-   
-    <div>{user?.firstName}</div>
+const DashboardPage = ({}: Props) => {
+  const { project } = useProject();
+  return (
     <div>
-      {user?.lastName}
+      
     </div>
-    </div>
-  )
-}
+  );
+};
 
-export default DashboardPage
+export default DashboardPage;
