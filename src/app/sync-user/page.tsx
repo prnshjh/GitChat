@@ -12,21 +12,21 @@ const SyncUser = async () => {
   if (!user.emailAddresses[0]?.emailAddress) {
     return notFound()
   }
-  await db.user.upsert({
+ await db.user.upsert({
     where: {
       emailAddress: user.emailAddresses[0]?.emailAddress ?? "",
     },
     update: {
       imageUrl: user.imageUrl,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName: user.firstName ?? undefined,
+      lastName: user.lastName ?? undefined,
     },
-    create: {
+  create: {
       id: userId,
       emailAddress: user.emailAddresses[0]?.emailAddress ?? "",
       imageUrl: user.imageUrl,
-      firstName: user.firstName,
-      lastName: user.lastName,
+      firstName: user.firstName ?? "", // Use empty string if null/undefined
+      lastName: user.lastName ?? "",   // Use empty string if null/undefined
     }
   });
   return redirect('/dashboard');
