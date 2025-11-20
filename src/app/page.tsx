@@ -10,24 +10,43 @@ import { redirect } from "next/navigation";
 
 
 
-export default async function Home() {
+// export default async function Home() {
 
-  const { userId } =await  auth();
-    if (userId) {
-      return  redirect('/dashboard')
-    }
+//   const { userId } =await  auth();
+//     if (userId) {
+//       return  redirect('/dashboard')
+//     }
   
   
+//   return (
+//     <div className="min-h-screen bg-background">
+//       <Navbar />
+//       <main>
+//         <Hero />
+//         <Features />
+//         <HowItWorks />
+//       </main>
+//       <Footer />
+//     </div>
+//   )
+// }
+export default async function Home() {
+  const { userId } = await auth();
+  if (userId) return redirect("/dashboard");
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <Navbar />
-      <main>
+
+      <main className="flex flex-col items-center justify-center flex-1 text-center px-4">
         <Hero />
         <Features />
         <HowItWorks />
       </main>
+
       <Footer />
     </div>
-  )
+  );
 }
+
 

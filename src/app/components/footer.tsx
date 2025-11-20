@@ -25,7 +25,7 @@ export function Footer() {
           </Link>
         </div> */}
         <div className="flex items-center gap-4">
-          <Link href="https://github.com/paras-verma7454/GitChat" target="_blank" className="hover:text-primary">
+          <Link href="https://github.com/prnshjh/gitchat" target="_blank" className="hover:text-primary">
             <Github className="h-5 w-5" />
             <span className="sr-only">GitHub</span>
           </Link>
@@ -33,10 +33,7 @@ export function Footer() {
             <Twitter className="h-5 w-5" />
             <span className="sr-only">Twitter</span>
           </Link> */}
-          <Link href="https://www.linkedin.com/in/paras-vermaa" target="_blank" className="hover:text-primary">
-            <Linkedin className="h-5 w-5" />
-            <span className="sr-only">LinkedIn</span>
-          </Link>
+         
         </div>
       </div>
       <div className="container py-4 text-center text-sm text-muted-foreground md:py-2">
