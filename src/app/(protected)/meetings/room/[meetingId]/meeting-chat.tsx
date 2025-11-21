@@ -1,18 +1,17 @@
-// src/app/(protected)/meetings/room/[meetingId]/meeting-chat.tsx
 "use client"
 
 import React, { useState, useEffect } from 'react'
 import { Button } from '~/components/ui/button'
-import { X, Send, Smile } from 'lucide-react'
+import { X } from 'lucide-react'
 import { Card } from '~/components/ui/card'
 import { useUser } from '@clerk/nextjs'
-import { 
+import {
+  Chat,
   Channel,
   MessageInput,
   MessageList,
   Thread,
-  Window,
-  ChannelHeader
+  Window
 } from 'stream-chat-react'
 import { StreamChat } from 'stream-chat'
 import 'stream-chat-react/dist/css/v2/index.css'
@@ -52,28 +51,24 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
         )
 
         const meetingChannel = client.channel('messaging', call.id, {
-          name: `Meeting Chat`,
+          name: 'Meeting Chat',
           members: [user.id]
         })
 
         await meetingChannel.watch()
-        
+
         setChatClient(client)
         setChannel(meetingChannel)
       } catch (error) {
-        console.error('Error initializing chat:', error)
+        console.error('Chat init failed:', error)
       }
     }
 
     initChat()
 
     return () => {
-      if (channel) {
-        channel.stopWatching()
-      }
-      if (chatClient) {
-        chatClient.disconnectUser()
-      }
+      if (channel) channel.stopWatching()
+      if (chatClient) chatClient.disconnectUser()
     }
   }, [user, call])
 
@@ -81,9 +76,7 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
     return (
       <Card className="w-96 h-full bg-gray-900 border-gray-700 flex items-center justify-center shadow-2xl">
         <div className="text-center space-y-3">
-          <div className="relative">
-            <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary border-t-transparent mx-auto"></div>
-          </div>
+          <div className="animate-spin rounded-full h-10 w-10 border-4 border-primary border-t-transparent mx-auto"></div>
           <p className="text-sm text-gray-400">Loading chat...</p>
         </div>
       </Card>
@@ -92,11 +85,12 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
 
   return (
     <Card className="w-96 h-full bg-gray-900/95 backdrop-blur-xl border-gray-700/50 flex flex-col overflow-hidden shadow-2xl">
-      {/* Custom Header */}
+      
+      {/* Header */}
       <div className="flex items-center justify-between p-4 border-b border-gray-700/50 bg-gray-800/80 backdrop-blur-sm">
         <div>
           <h3 className="text-white font-semibold text-lg">Meeting Chat</h3>
-          <p className="text-xs text-gray-400 mt-0.5">Messages disappear after meeting</p>
+          <p className="text-xs text-gray-400">Messages disappear after meeting</p>
         </div>
         <Button
           variant="ghost"
@@ -108,18 +102,20 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
         </Button>
       </div>
 
-      {/* Stream Chat UI */}
+      {/* Chat UI */}
       <div className="flex-1 overflow-hidden meeting-chat-container">
-        <Channel channel={channel}>
-          <Window>
-            <MessageList />
-            <MessageInput />
-          </Window>
-          <Thread />
-        </Channel>
+        <Chat client={chatClient} theme="str-chat__theme-dark">
+          <Channel channel={channel}>
+            <Window>
+              <MessageList />
+              <MessageInput />
+            </Window>
+            <Thread />
+          </Channel>
+        </Chat>
       </div>
 
-      <style jsx global>{`
+     <style jsx global>{` 
         .meeting-chat-container {
           --str-chat__primary-color: #3b82f6;
           --str-chat__active-primary-color: #2563eb;
