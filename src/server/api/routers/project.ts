@@ -1,7 +1,62 @@
+// import { z } from "zod";
+// import { createTRPCRouter, protectedProcedure } from "../trpc";
+// import { pollCommits } from "~/lib/github";
+// import { checkCredits, indexGithubRepo } from "~/lib/github-loader";
+
+// export const projectRouter = createTRPCRouter({
+
+//     createProject: protectedProcedure.input(z.object({
+//         name: z.string(),
+//         repoUrl: z.string(),
+//         gitHubToken: z.string().optional(),
+//     })).mutation(async ({ctx, input}) => {
+
+//         const {name, repoUrl, gitHubToken}= input;
+
+//         const user = await ctx.db.user.findUnique({
+//             where:{
+//                 id: ctx.user.userId!
+//             },
+//             select:{
+//                 credits: true
+//             }
+//         })
+
+//         if(!user){
+//             throw new Error("User not found");
+//         }
+//         const currentCredit = user.credits || 0;
+//         const fileCount = await checkCredits(repoUrl, gitHubToken);
+//         if (fileCount > currentCredit) {
+//             throw new Error("Insufficient credits");
+//         }
+
+
+//         const project = await ctx.db.project.create({
+//             data: {
+//                 name,
+//                 repoUrl,
+//                 gitHubToken,
+//                 userToProjects:{
+//                     create:{
+//                         userId: ctx.user.userId!,
+//                     }
+//                 }
+//             },
+//         });
+//         await pollCommits(project.id);
+//         await indexGithubRepo(project.id, repoUrl, gitHubToken);
+//         await ctx.db.user.update({where:{id: ctx.user.userId!}, data:{credits: { decrement: fileCount}}});
+//         return project;
+//     }),
+// src/server/api/routers/project.ts
+// Update just the createProject mutation (keep everything else the same)
+
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure } from "../trpc";
 import { pollCommits } from "~/lib/github";
 import { checkCredits, indexGithubRepo } from "~/lib/github-loader";
+import { TRPCError } from "@trpc/server";
 
 export const projectRouter = createTRPCRouter({
 
@@ -11,44 +66,81 @@ export const projectRouter = createTRPCRouter({
         gitHubToken: z.string().optional(),
     })).mutation(async ({ctx, input}) => {
 
-        const {name, repoUrl, gitHubToken}= input;
+        try {
+            const {name, repoUrl, gitHubToken}= input;
 
-        const user = await ctx.db.user.findUnique({
-            where:{
-                id: ctx.user.userId!
-            },
-            select:{
-                credits: true
-            }
-        })
-
-        if(!user){
-            throw new Error("User not found");
-        }
-        const currentCredit = user.credits || 0;
-        const fileCount = await checkCredits(repoUrl, gitHubToken);
-        if (fileCount > currentCredit) {
-            throw new Error("Insufficient credits");
-        }
-
-
-        const project = await ctx.db.project.create({
-            data: {
-                name,
-                repoUrl,
-                gitHubToken,
-                userToProjects:{
-                    create:{
-                        userId: ctx.user.userId!,
-                    }
+            // Check if user exists
+            const user = await ctx.db.user.findUnique({
+                where:{
+                    id: ctx.user.userId!
+                },
+                select:{
+                    credits: true
                 }
-            },
-        });
-        await pollCommits(project.id);
-        await indexGithubRepo(project.id, repoUrl, gitHubToken);
-        await ctx.db.user.update({where:{id: ctx.user.userId!}, data:{credits: { decrement: fileCount}}});
-        return project;
+            });
+
+            if(!user){
+                throw new TRPCError({
+                    code: 'NOT_FOUND',
+                    message: 'User not found'
+                });
+            }
+
+            const currentCredit = user.credits || 0;
+            
+            // Check credits needed
+            const fileCount = await checkCredits(repoUrl, gitHubToken);
+            
+            if (fileCount > currentCredit) {
+                throw new TRPCError({
+                    code: 'BAD_REQUEST',
+                    message: `Insufficient credits. Need ${fileCount} credits but you have ${currentCredit}.`
+                });
+            }
+
+            // Create project
+            const project = await ctx.db.project.create({
+                data: {
+                    name,
+                    repoUrl,
+                    gitHubToken,
+                    userToProjects:{
+                        create:{
+                            userId: ctx.user.userId!,
+                        }
+                    }
+                },
+            });
+
+            // Deduct credits immediately
+            await ctx.db.user.update({
+                where:{id: ctx.user.userId!}, 
+                data:{credits: { decrement: fileCount}}
+            });
+
+            // Start background tasks (don't await these)
+            Promise.all([
+                pollCommits(project.id),
+                indexGithubRepo(project.id, repoUrl, gitHubToken)
+            ]).catch(error => {
+                console.error('Background processing error:', error);
+            });
+
+            return project;
+        } catch (error: any) {
+            console.error('Error in createProject:', error);
+            
+            if (error instanceof TRPCError) {
+                throw error;
+            }
+            
+            throw new TRPCError({
+                code: 'INTERNAL_SERVER_ERROR',
+                message: error?.message || 'Failed to create project'
+            });
+        }
     }),
+
     getProjects: protectedProcedure.query(async ({ctx}) => {
         return await ctx.db.project.findMany({
             where: {
