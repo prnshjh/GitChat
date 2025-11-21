@@ -1,6 +1,6 @@
 "use client"
 
-import { Bot, CreditCard, LayoutDashboard, Plus, Presentation } from "lucide-react"
+import { Bot, Code, CreditCard, LayoutDashboard, Plus, Presentation } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "~/components/ui/button"
@@ -25,6 +25,9 @@ export function AppSidebar(){
         title:"Meetings",
         url:"/meetings",
         icon:Presentation
+    },     {title:"Code",
+        url:"/code",
+        icon:Code
     },{
         title:"Billing",
         url:"/billing",
@@ -42,9 +45,7 @@ export function AppSidebar(){
             </SidebarHeader>
             <SidebarContent>
                 <SidebarGroup>
-                    <SidebarGroupLabel>
-                        Application
-                    </SidebarGroupLabel>
+                 
                     <SidebarGroupContent>
                         <SidebarMenu> 
 

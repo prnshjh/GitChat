@@ -1,0 +1,814 @@
+"use client"
+
+import React, { useState, useRef } from "react"
+import { Button } from "~/components/ui/button"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "~/components/ui/card"
+import { Input } from "~/components/ui/input"
+import { Textarea } from "~/components/ui/textarea"
+import { Badge } from "~/components/ui/badge"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs"
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from "~/components/ui/select"
+import { 
+  Loader2, 
+  Copy, 
+  Download, 
+  Sparkles, 
+  Code2, 
+  FileText,
+  Bot,
+  StopCircle // Added icon for cancellation
+} from "lucide-react"
+import useProject from "~/hooks/use-project"
+import { toast } from "sonner"
+
+// Syntax Highlighting Imports
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+
+// Import our new helper
+import { generateCodeStream } from "~/lib/gemini-code"
+
+const LANGUAGE_OPTIONS = [
+  { value: "typescript", label: "TypeScript", extension: "ts" },
+  { value: "javascript", label: "JavaScript", extension: "js" },
+  { value: "python", label: "Python", extension: "py" },
+  { value: "go", label: "Go", extension: "go" },
+  { value: "rust", label: "Rust", extension: "rs" },
+  { value: "java", label: "Java", extension: "java" },
+  { value: "cpp", label: "C++", extension: "cpp" },
+  { value: "css", label: "CSS", extension: "css" },
+  { value: "html", label: "HTML", extension: "html" },
+]
+
+const CODE_TEMPLATES = [
+  {
+    title: "API Route",
+    description: "Create a new API endpoint",
+    prompt: "Create a REST API route for managing user data with proper error handling and validation"
+  },
+  {
+    title: "UI Component",
+    description: "Build a reusable React component",
+    prompt: "Create a modern React component with TypeScript, tailwind CSS, and proper accessibility"
+  },
+  {
+    title: "Utility Function",
+    description: "Generate helper functions",
+    prompt: "Create utility functions for data transformation and validation with proper TypeScript types"
+  },
+  {
+    title: "Database Query",
+    description: "Generate database operations",
+    prompt: "Create database queries with proper error handling and type safety"
+  }
+]
+
+export default function ModernCodeGenPage() {
+  const { project } = useProject()
+  const [prompt, setPrompt] = useState("")
+  const [language, setLanguage] = useState("typescript")
+  const [filename, setFilename] = useState("")
+  
+  // State for Loading and Output
+  const [loading, setLoading] = useState(false)
+  const [output, setOutput] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("generate")
+
+  // Ref to handle Cancellation
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  const projectId = project?.id
+
+  const generateCode = async () => {
+    if (!projectId) {
+      toast.error("Please select a project first")
+      return
+    }
+    if (!prompt.trim()) {
+      toast.error("Please describe what you want to build")
+      return
+    }
+
+    // 1. Reset state and create AbortController
+    setLoading(true)
+    setOutput("") // Clear previous output or set to empty string for stream start
+    
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    const controller = new AbortController()
+    abortControllerRef.current = controller
+
+    try {
+      const aiModel = (process.env.NEXT_PUBLIC_GEMINI_MODEL as string) || "gemini-2.5-flash"
+
+      // 2. Call the stream helper
+      await generateCodeStream(
+        {
+          projectId,
+          prompt: prompt.trim(),
+          language,
+          filename: filename.trim() || undefined,
+          aiModel
+        },
+        (chunk) => {
+          // 3. Update state as chunks arrive
+          setOutput((prev) => (prev || "") + chunk)
+        },
+        controller.signal
+      )
+
+      toast.success("Generation complete!")
+    } catch (error: any) {
+      // Ignore abort errors (user cancelled)
+      if (error.name === 'AbortError') {
+        toast.info("Generation cancelled")
+        return
+      }
+      console.error("Code generation error:", error)
+      toast.error(error.message || "Failed to generate code. Please try again.")
+    } finally {
+      setLoading(false)
+      abortControllerRef.current = null
+    }
+  }
+
+  const stopGeneration = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+      abortControllerRef.current = null
+      setLoading(false)
+    }
+  }
+
+  const handleTemplateClick = (templatePrompt: string) => {
+    setPrompt(templatePrompt)
+    setActiveTab("generate")
+    setTimeout(() => {
+      document.getElementById("code-prompt")?.focus()
+    }, 100)
+  }
+
+  const copyToClipboard = async () => {
+    if (!output) return
+    try {
+      await navigator.clipboard.writeText(output)
+      toast.success("Code copied to clipboard!")
+    } catch (error) {
+      toast.error("Failed to copy code")
+    }
+  }
+
+  const downloadFile = () => {
+    if (!output) return
+    
+    const selectedLanguage = LANGUAGE_OPTIONS.find(lang => lang.value === language)
+    const extension = selectedLanguage?.extension || "txt"
+    const finalFilename = filename.trim() || `generated-code.${extension}`
+    
+    const blob = new Blob([output], { type: "text/plain;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = finalFilename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    
+    toast.success("File downloaded successfully!")
+  }
+
+  const getLanguageIcon = (lang: string) => {
+    const icons: { [key: string]: string } = {
+      typescript: "TS",
+      javascript: "JS",
+      python: "PY",
+      go: "GO",
+      rust: "RS",
+      java: "JV",
+      cpp: "C++",
+      css: "CSS",
+      html: "HTML"
+    }
+    return icons[lang] || lang.toUpperCase()
+  }
+
+  return (
+    <div className="space-y-6 max-w-6xl mx-auto">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="generate" className="flex items-center gap-2">
+            <Code2 className="h-4 w-4" />
+            Generate Code
+          </TabsTrigger>
+          <TabsTrigger value="templates" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            Quick Templates
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="generate" className="space-y-6">
+          {/* Project Context Card */}
+          {project && (
+            <Card className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/20 dark:to-indigo-950/20 border-blue-200 dark:border-blue-800">
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Bot className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    <div>
+                      <p className="font-medium text-sm">Using repository context</p>
+                      <p className="text-xs text-muted-foreground">
+                        AI has access to {project.name}&apos;s codebase for context-aware generation
+                      </p>
+                    </div>
+                  </div>
+                  <Badge variant="secondary" className="bg-white/50 dark:bg-slate-800/50">
+                    RAG Enabled
+                  </Badge>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Main Generator Card */}
+          <Card>
+            <CardContent className="space-y-6 pt-6">
+              {/* File Configuration */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Filename (optional)</label>
+                  <Input
+                    placeholder="e.g., src/components/ModernButton.tsx"
+                    value={filename}
+                    onChange={(e) => setFilename(e.target.value)}
+                    className="font-mono text-sm"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <label className="text-sm font-medium">Programming Language</label>
+                  <Select value={language} onValueChange={setLanguage}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LANGUAGE_OPTIONS.map((lang) => (
+                        <SelectItem key={lang.value} value={lang.value}>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              {getLanguageIcon(lang.value)}
+                            </Badge>
+                            {lang.label}
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Prompt Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-medium">
+                  Code Description <span className="text-red-500">*</span>
+                </label>
+                <Textarea
+                  id="code-prompt"
+                  className="min-h-32 font-mono resize-vertical"
+                  placeholder="Describe the code you want to build..."
+                  value={prompt}
+                  onChange={(e) => setPrompt(e.target.value)}
+                  disabled={loading}
+                />
+                <div className="flex justify-between items-center pt-2">
+                  <p className="text-xs text-muted-foreground">
+                    {prompt.length}/1000 characters
+                  </p>
+                  
+                  <div className="flex gap-2">
+                    {loading && (
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={stopGeneration}
+                        className="gap-2"
+                      >
+                        <StopCircle className="h-4 w-4" />
+                        Stop Generating
+                      </Button>
+                    )}
+                    
+                    <Button
+                      onClick={generateCode}
+                      disabled={!projectId || !prompt.trim() || loading}
+                      className="gap-2"
+                    >
+                      {loading ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="h-4 w-4" />
+                          Generate Code
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="templates">
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick Start Templates</CardTitle>
+              <CardDescription>
+                Jumpstart your development with these common code patterns
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {CODE_TEMPLATES.map((template, index) => (
+                  <Card 
+                    key={index}
+                    className="cursor-pointer transition-all hover:shadow-md hover:border-primary/50 group"
+                    onClick={() => handleTemplateClick(template.prompt)}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-2">
+                          <h3 className="font-semibold group-hover:text-primary transition-colors">
+                            {template.title}
+                          </h3>
+                          <p className="text-sm text-muted-foreground">
+                            {template.description}
+                          </p>
+                        </div>
+                        <Sparkles className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Output Section */}
+      {(output || loading) && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold">Generated Code</h3>
+              <p className="text-sm text-muted-foreground">
+                {LANGUAGE_OPTIONS.find(lang => lang.value === language)?.label} • 
+                {filename ? ` ${filename}` : ` generated.${LANGUAGE_OPTIONS.find(lang => lang.value === language)?.extension}`}
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={copyToClipboard}
+                className="gap-2"
+                disabled={!output}
+              >
+                <Copy className="h-4 w-4" />
+                Copy
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={downloadFile}
+                className="gap-2"
+                disabled={!output}
+              >
+                <Download className="h-4 w-4" />
+                Download
+              </Button>
+            </div>
+          </div>
+
+          <Card className="border-2 overflow-hidden">
+            <div className="relative">
+               {/* Syntax Highlighter Implementation */}
+               <SyntaxHighlighter
+                  language={language}
+                  style={vscDarkPlus}
+                  customStyle={{
+                    margin: 0,
+                    padding: '1.5rem',
+                    fontSize: '0.875rem',
+                    lineHeight: '1.5',
+                    borderRadius: '0.5rem',
+                    minHeight: '200px'
+                  }}
+                  wrapLines={true}
+                  showLineNumbers={true}
+                >
+                  {output || "// Generating code..."}
+                </SyntaxHighlighter>
+            </div>
+          </Card>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
+
+
+
+
+
+
+//secondary
+
+
+
+"use client"
+
+import React, { useState, useRef, useEffect } from "react"
+import { 
+  Loader2, Copy, Download, Sparkles, Code2, FileText, 
+  StopCircle, Eraser, Bot, Zap, Terminal, Check, ChevronRight, Maximize2
+} from "lucide-react"
+import { Button } from "~/components/ui/button"
+import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "~/components/ui/card"
+import { Input } from "~/components/ui/input"
+import { Textarea } from "~/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select"
+import { Badge } from "~/components/ui/badge"
+import { toast } from "sonner"
+import { cn } from "~/lib/utils" // standard shadcn utility
+
+// AI SDK & Syntax Highlighting
+import { readStreamableValue } from "ai/rsc"
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
+import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism'
+import { generateCodeStream } from "~/lib/gemini-code"
+
+// Configuration Constants
+const LANGUAGE_OPTIONS = [
+  { value: "typescript", label: "TypeScript", extension: "ts", color: "text-blue-400" },
+  { value: "javascript", label: "JavaScript", extension: "js", color: "text-yellow-400" },
+  { value: "python", label: "Python", extension: "py", color: "text-green-400" },
+  { value: "go", label: "Go", extension: "go", color: "text-cyan-400" },
+  { value: "rust", label: "Rust", extension: "rs", color: "text-orange-400" },
+  { value: "java", label: "Java", extension: "java", color: "text-red-400" },
+  { value: "css", label: "CSS", extension: "css", color: "text-blue-300" },
+  { value: "html", label: "HTML", extension: "html", color: "text-orange-500" },
+  { value: "sql", label: "SQL", extension: "sql", color: "text-purple-400" },
+]
+
+const CODE_TEMPLATES = [
+  {
+    title: "React Component",
+    description: "Responsive Card with Tailwind",
+    icon: <Code2 className="w-5 h-5 text-blue-500" />,
+    prompt: "Create a responsive React Card component using Tailwind CSS. Include an image slot, title, description, and a CTA button. Use TypeScript interfaces."
+  },
+  {
+    title: "Next.js API Route",
+    description: "POST endpoint with Zod",
+    icon: <Terminal className="w-5 h-5 text-green-500" />,
+    prompt: "Create a Next.js App Router API route (POST) that handles user registration. Include Zod schema validation, error handling, and proper JSON responses."
+  },
+  {
+    title: "Utility Function",
+    description: "Date & Currency Formatter",
+    icon: <Zap className="w-5 h-5 text-yellow-500" />,
+    prompt: "Write a robust utility function to format currency and dates based on user locale. Include JSDoc comments and unit test examples."
+  },
+  {
+    title: "SQL Query",
+    description: "Complex Join & Aggregation",
+    icon: <FileText className="w-5 h-5 text-purple-500" />,
+    prompt: "Write a SQL query to fetch the top 5 customers by total spending in the last 30 days, joining 'users' and 'orders' tables."
+  }
+]
+
+export default function ModernCodeGenPage() {
+  const [prompt, setPrompt] = useState("")
+  const [language, setLanguage] = useState("typescript")
+  const [filename, setFilename] = useState("")
+  const [loading, setLoading] = useState(false)
+  const [output, setOutput] = useState("")
+  const [activeTab, setActiveTab] = useState("generate")
+  const [copied, setCopied] = useState(false)
+  
+  const stopRef = useRef<boolean>(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
+
+  // Auto-scroll to bottom as code generates
+  useEffect(() => {
+    if (loading && bottomRef.current) {
+      bottomRef.current.scrollIntoView({ behavior: "smooth" })
+    }
+  }, [output, loading])
+
+  const handleGenerate = async () => {
+    if (!prompt.trim()) {
+      toast.error("Please enter a prompt")
+      return
+    }
+
+    setLoading(true)
+    setOutput("")
+    stopRef.current = false
+
+    try {
+      const { output: streamOutput } = await generateCodeStream({
+        prompt: prompt.trim(),
+        language,
+        filename: filename || undefined
+      })
+
+      for await (const chunk of readStreamableValue(streamOutput)) {
+        if (stopRef.current) break
+        if (chunk) setOutput((prev) => prev + chunk)
+      }
+      
+      if (!stopRef.current) toast.success("Generation complete")
+    } catch (error: any) {
+      toast.error("Generation failed")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleStop = () => {
+    stopRef.current = true
+    setLoading(false)
+    toast.info("Generation stopped")
+  }
+
+  const handleTemplateClick = (templatePrompt: string) => {
+    setPrompt(templatePrompt)
+    setActiveTab("generate")
+    setTimeout(() => document.querySelector('textarea')?.focus(), 100)
+  }
+
+  const copyToClipboard = () => {
+    if (!output) return
+    navigator.clipboard.writeText(output)
+    setCopied(true)
+    toast.success("Copied to clipboard")
+    setTimeout(() => setCopied(false), 2000)
+  }
+
+  const downloadFile = () => {
+    if (!output) return
+    const ext = LANGUAGE_OPTIONS.find(l => l.value === language)?.extension || "txt"
+    const name = filename || `generated.${ext}`
+    const blob = new Blob([output], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-background to-muted/20 pb-20">
+      <div className="max-w-5xl mx-auto p-6 space-y-8">
+        
+        {/* Hero Section */}
+        <div className="text-center space-y-4 py-8">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/10 border border-indigo-500/20 text-indigo-600 dark:text-indigo-400 text-sm font-medium animate-in fade-in slide-in-from-top-4 duration-500">
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Powered by Gemini 2.5 Flash</span>
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight bg-clip-text text-transparent bg-gradient-to-r from-gray-900 via-indigo-800 to-gray-900 dark:from-white dark:via-indigo-200 dark:to-white animate-in fade-in zoom-in-95 duration-500 delay-100">
+            Build faster with AI
+          </h1>
+          <p className="text-lg text-muted-foreground max-w-2xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
+            Describe your logic, component, or query. Get production-ready code instantly.
+          </p>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-8">
+          <div className="flex justify-center">
+            <TabsList className="grid grid-cols-2 w-[300px] p-1 bg-muted/50 backdrop-blur-sm border rounded-full">
+              <TabsTrigger value="generate" className="rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all">
+                Generator
+              </TabsTrigger>
+              <TabsTrigger value="templates" className="rounded-full data-[state=active]:bg-background data-[state=active]:shadow-sm transition-all">
+                Templates
+              </TabsTrigger>
+            </TabsList>
+          </div>
+
+          <TabsContent value="generate" className="space-y-6 outline-none">
+            <div className="grid lg:grid-cols-5 gap-6 items-start">
+              
+              {/* Left Side: Controls */}
+              <Card className="lg:col-span-2 border-0 shadow-lg bg-background/60 backdrop-blur-xl ring-1 ring-border/50">
+                <CardHeader>
+                  <CardTitle className="text-lg">Configuration</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Language</label>
+                    <Select value={language} onValueChange={setLanguage}>
+                      <SelectTrigger className="h-10 border-muted-foreground/20 focus:ring-indigo-500/20 focus:border-indigo-500">
+                        <div className="flex items-center gap-2">
+                           <span className={cn("w-2 h-2 rounded-full", 
+                             LANGUAGE_OPTIONS.find(l => l.value === language)?.color.replace("text-", "bg-") || "bg-gray-400"
+                           )} />
+                           <SelectValue />
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {LANGUAGE_OPTIONS.map((lang) => (
+                          <SelectItem key={lang.value} value={lang.value}>
+                            {lang.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Filename</label>
+                    <Input 
+                      className="h-10 font-mono text-sm border-muted-foreground/20 focus:ring-indigo-500/20 focus:border-indigo-500"
+                      placeholder={`app.${LANGUAGE_OPTIONS.find(l => l.value === language)?.extension}`}
+                      value={filename}
+                      onChange={(e) => setFilename(e.target.value)}
+                    />
+                  </div>
+                  
+                  <div className="pt-4">
+                    <div className="rounded-lg bg-indigo-50 dark:bg-indigo-950/30 p-3 border border-indigo-100 dark:border-indigo-900/50">
+                      <div className="flex gap-2 items-start">
+                        <Bot className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5" />
+                        <div className="text-xs text-indigo-900 dark:text-indigo-200">
+                          <span className="font-medium block mb-1">Pro Tip:</span>
+                          Be specific about libraries (e.g., "Use Zod for validation", "Use Lucide React for icons").
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Right Side: Prompt & Output */}
+              <div className="lg:col-span-3 space-y-6">
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-indigo-500 to-purple-600 rounded-xl opacity-20 group-hover:opacity-40 transition duration-500 blur"></div>
+                  <Card className="relative border-0 shadow-xl bg-background">
+                    <CardContent className="p-4">
+                      <Textarea 
+                        placeholder="Describe exactly what you want to build..."
+                        className="min-h-[160px] resize-none border-0 focus-visible:ring-0 p-2 text-base leading-relaxed placeholder:text-muted-foreground/50"
+                        value={prompt}
+                        onChange={(e) => setPrompt(e.target.value)}
+                      />
+                      <div className="flex justify-between items-center pt-4 border-t mt-2">
+                        <span className="text-xs text-muted-foreground pl-2">
+                          {prompt.length} characters
+                        </span>
+                        <div className="flex gap-2">
+                          <Button variant="ghost" size="sm" onClick={() => setPrompt("")} disabled={!prompt || loading} className="text-muted-foreground hover:text-foreground">
+                            <Eraser className="w-4 h-4 mr-2" /> Clear
+                          </Button>
+                          {loading ? (
+                            <Button variant="destructive" size="sm" onClick={handleStop} className="shadow-md">
+                              <StopCircle className="w-4 h-4 mr-2" /> Stop
+                            </Button>
+                          ) : (
+                            <Button 
+                              onClick={handleGenerate} 
+                              disabled={!prompt.trim()} 
+                              className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-md transition-all hover:scale-[1.02]"
+                            >
+                              <Sparkles className="w-4 h-4 mr-2" /> Generate Code
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Code Output Terminal */}
+                {(output || loading) && (
+                  <div className="animate-in fade-in slide-in-from-bottom-8 duration-700">
+                    <div className="rounded-xl overflow-hidden border shadow-2xl bg-[#1e1e1e]">
+                      
+                      {/* Terminal Header */}
+                      <div className="flex items-center justify-between px-4 py-3 bg-[#252526] border-b border-[#333]">
+                        <div className="flex gap-2">
+                          <div className="w-3 h-3 rounded-full bg-[#ff5f56]" />
+                          <div className="w-3 h-3 rounded-full bg-[#ffbd2e]" />
+                          <div className="w-3 h-3 rounded-full bg-[#27c93f]" />
+                        </div>
+                        <div className="text-xs text-gray-400 font-mono flex items-center gap-2">
+                           {loading && <Loader2 className="w-3 h-3 animate-spin" />}
+                           {filename || `script.${LANGUAGE_OPTIONS.find(l => l.value === language)?.extension}`}
+                        </div>
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" size="icon" 
+                            className="h-6 w-6 text-gray-400 hover:text-white hover:bg-white/10" 
+                            onClick={copyToClipboard}
+                          >
+                            {copied ? <Check className="w-3.5 h-3.5 text-green-400" /> : <Copy className="w-3.5 h-3.5" />}
+                          </Button>
+                          <Button 
+                            variant="ghost" size="icon" 
+                            className="h-6 w-6 text-gray-400 hover:text-white hover:bg-white/10" 
+                            onClick={downloadFile}
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+
+                      {/* Code Viewer */}
+                      <div className="relative group max-h-[600px] overflow-auto custom-scrollbar">
+                        <SyntaxHighlighter
+                          language={language}
+                          style={vscDarkPlus}
+                          customStyle={{
+                            margin: 0,
+                            padding: '1.5rem',
+                            fontSize: '0.9rem',
+                            lineHeight: '1.6',
+                            background: 'transparent',
+                            fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+                          }}
+                          showLineNumbers={true}
+                          wrapLines={true}
+                        >
+                          {output || ""}
+                        </SyntaxHighlighter>
+                        <div ref={bottomRef} />
+                        
+                        {/* Loading Cursor Effect */}
+                        {loading && (
+                           <span className="inline-block w-2 h-4 bg-indigo-500 ml-1 animate-pulse align-middle" />
+                        )}
+                      </div>
+                      
+                      {/* Terminal Status Bar */}
+                      <div className="bg-[#007acc] text-white px-3 py-1 text-[10px] flex justify-between font-sans">
+                         <span>{language.toUpperCase()}</span>
+                         <span>Ln {output.split('\n').length}, Col {output.length}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="templates" className="animate-in fade-in slide-in-from-right-4 duration-300 outline-none">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 max-w-4xl mx-auto">
+              {CODE_TEMPLATES.map((t, i) => (
+                <Card 
+                  key={i} 
+                  className="cursor-pointer hover:border-indigo-500/50 hover:bg-indigo-50/30 dark:hover:bg-indigo-950/10 hover:shadow-md transition-all duration-200 group border-dashed"
+                  onClick={() => handleTemplateClick(t.prompt)}
+                >
+                  <CardContent className="p-6 flex gap-4 items-start">
+                    <div className="p-3 rounded-lg bg-background border shadow-sm group-hover:scale-110 transition-transform duration-300">
+                      {t.icon}
+                    </div>
+                    <div className="space-y-1">
+                      <h3 className="font-semibold text-foreground group-hover:text-indigo-600 transition-colors flex items-center gap-2">
+                        {t.title}
+                        <ChevronRight className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity -translate-x-2 group-hover:translate-x-0" />
+                      </h3>
+                      <p className="text-sm text-muted-foreground leading-relaxed">
+                        {t.description}
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+    </div>
+  )
+}
