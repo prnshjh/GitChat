@@ -7,6 +7,7 @@ import { Card } from '~/components/ui/card'
 import { useUser } from '@clerk/nextjs'
 import { 
   Channel,
+  Chat,
   MessageInput,
   MessageList,
   Thread,
@@ -28,6 +29,10 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
   useEffect(() => {
     if (!user) return
 
+    let mounted = true
+    let client: StreamChat | null = null
+    let meetingChannel: any = null
+
     const initChat = async () => {
       try {
         const response = await fetch('/api/stream/token', {
@@ -38,24 +43,39 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
         
         const { token } = await response.json()
 
-        const client = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!)
+        client = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!)
         
-        await client.connectUser(
-          {
-            id: user.id,
-            name: user.fullName || user.firstName || 'Anonymous',
-            image: user.imageUrl
-          },
-          token
-        )
+        // Avoid consecutive connectUser calls if already connected
+        if (!client.userID) {
+          await client.connectUser(
+            {
+              id: user.id,
+              name: user.fullName || user.firstName || 'Anonymous',
+              image: user.imageUrl
+            },
+            token
+          )
+        } else if (client.userID !== user.id) {
+          // If a different user is connected, reset and connect the correct user
+          await client.disconnectUser()
+          await client.connectUser(
+            {
+              id: user.id,
+              name: user.fullName || user.firstName || 'Anonymous',
+              image: user.imageUrl
+            },
+            token
+          )
+        }
 
-        const meetingChannel = client.channel('messaging', call.id, {
+        meetingChannel = client.channel('messaging', call.id, {
           name: `Meeting Chat - ${call.id}`,
           members: [user.id]
         })
 
         await meetingChannel.watch()
         
+        if (!mounted) return
         setChatClient(client)
         setChannel(meetingChannel)
       } catch (error) {
@@ -66,11 +86,12 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
     initChat()
 
     return () => {
-      if (channel) {
-        channel.stopWatching()
+      mounted = false
+      if (meetingChannel) {
+        try { meetingChannel.stopWatching() } catch {}
       }
-      if (chatClient) {
-        chatClient.disconnectUser()
+      if (client) {
+        try { client.disconnectUser() } catch {}
       }
     }
   }, [user, call])
@@ -101,13 +122,15 @@ export function MeetingChat({ call, onClose }: MeetingChatProps) {
       </div>
 
       <div className="flex-1 overflow-hidden stream-chat-meeting">
-        <Channel channel={channel}>
-          <Window>
-            <MessageList />
-            <MessageInput />
-          </Window>
-          <Thread />
-        </Channel>
+        <Chat client={chatClient}>
+          <Channel channel={channel}>
+            <Window>
+              <MessageList />
+              <MessageInput />
+            </Window>
+            <Thread />
+          </Channel>
+        </Chat>
       </div>
 
       <style jsx global>{`
