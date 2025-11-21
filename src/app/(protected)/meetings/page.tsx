@@ -1,5 +1,5 @@
 "use client"
-import React from 'react'
+import React, { useState } from 'react'
 import useProject from '~/hooks/use-project'
 import { api } from '~/trpc/react'
 import MeetingCard from '../dashboard/meeting-card'
@@ -7,8 +7,9 @@ import Link from 'next/link'
 import { Badge } from '~/components/ui/badge'
 import { Button } from '~/components/ui/button'
 import { toast } from 'sonner'
-import { ref } from 'firebase/storage'
 import useRefetch from '~/hooks/use-refetch'
+import { NewMeetingModal } from './components/new-meeting-modal'
+import { Video } from 'lucide-react'
 
 const MeetingPage = () => {
     const {projectId}= useProject()
@@ -17,11 +18,34 @@ const MeetingPage = () => {
     })
     const deleteMeeting = api.project.deleteMeeting.useMutation();
     const refetch = useRefetch()
+    const [showNewMeetingModal, setShowNewMeetingModal] = useState(false)
+
   return (
     <>
+        <div className="flex items-center justify-between mb-6">
+            <div>
+                <h1 className='text-xl font-semibold'>Meetings</h1>
+                <p className='text-sm text-muted-foreground'>
+                    Record and analyze your meetings or start live video calls
+                </p>
+            </div>
+            <Button 
+                onClick={() => setShowNewMeetingModal(true)}
+                className="gap-2"
+            >
+                <Video className="h-4 w-4" />
+                New Meeting
+            </Button>
+        </div>
+
+        <NewMeetingModal 
+            open={showNewMeetingModal} 
+            onOpenChange={setShowNewMeetingModal}
+        />
+
         <MeetingCard/>
         <div className="h-6"></div>
-        <h1 className='text-xl font-semibold'>Meetings</h1>
+        <h2 className='text-lg font-semibold mb-2'>Recorded Meetings</h2>
         <div className="h-1"></div>
         {meetings && meetings.length === 0 && <div>No meetings found</div> }
         {isLoading && <div>Loading...</div>}
