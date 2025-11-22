@@ -33,7 +33,7 @@ const MeetingPage = () => {
             <Button 
                 onClick={() => {
                     // Scroll to upload section
-                    document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth' })
+                   <MeetingCard></MeetingCard>
                 }}
                 variant="outline"
                 className="gap-2"
@@ -49,8 +49,8 @@ const MeetingPage = () => {
         />
 
         {/* New Meeting button in central area */}
-        <div id="upload-section" className="flex flex-col items-center justify-center py-12 mb-8 border-2 border-dashed rounded-lg bg-muted/20">
-            <Video className="h-12 w-12 text-muted-foreground mb-4" />
+        <div id="upload-section" className="flex flex-col items-center justify-center py-12 mb-8 border-2 rounded-lg bg-muted/20 bg-white">
+            <Video className="h-12 w-12 text-muted-foreground mb-4 animate-bounce" />
             <h2 className="text-lg font-semibold mb-2">Create a new meeting</h2>
             <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
                 Analyse your meeting with GitChat.<br />

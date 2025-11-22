@@ -93,6 +93,7 @@ const MeetingCard = () => {
                         <br/>
                         Powered by AI
                     </p>
+                  
                     <div className='mt-4'>
                         <Button disabled={isUploading}>
                             <Upload className='h-5 w-5 mr-2' aria-hidden='true'/>
@@ -101,6 +102,7 @@ const MeetingCard = () => {
                         </Button>
 
                     </div>
+                    
                 </>
             )}
             {isUploading && (
