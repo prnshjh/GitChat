@@ -134,17 +134,69 @@ export const projectRouter = createTRPCRouter({
         })
     }),
     
-    getQuestions: protectedProcedure.input(z.object({
-        projectId: z.string(),
-    })).query(async ({ctx, input}) => {
-        return await ctx.db.question.findMany({
-            where: {projectId: input.projectId},
-            include:{
-                user: true,
+// Add this to your existing project router
+// File: src/server/api/routers/project.ts
+
+// Replace the getQuestions procedure with this improved version:
+
+getQuestions: protectedProcedure.input(z.object({
+    projectId: z.string(),
+})).query(async ({ctx, input}) => {
+    try {
+        // Validate projectId
+        if (!input.projectId) {
+            throw new TRPCError({
+                code: 'BAD_REQUEST',
+                message: 'Project ID is required'
+            });
+        }
+
+        // Check if project exists
+        const project = await ctx.db.project.findUnique({
+            where: { id: input.projectId },
+            select: { id: true }
+        });
+
+        if (!project) {
+            throw new TRPCError({
+                code: 'NOT_FOUND',
+                message: 'Project not found'
+            });
+        }
+
+        // Fetch questions
+        const questions = await ctx.db.question.findMany({
+            where: { projectId: input.projectId },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        imageUrl: true,
+                        firstName: true,
+                        lastName: true,
+                    }
+                },
             },
             orderBy: { createdAt: 'desc' },
         });
-    }),
+
+        return questions;
+    } catch (error) {
+        console.error('Error fetching questions:', error);
+        
+        // Re-throw TRPC errors
+        if (error instanceof TRPCError) {
+            throw error;
+        }
+        
+        // Wrap other errors
+        throw new TRPCError({
+            code: 'INTERNAL_SERVER_ERROR',
+            message: 'Failed to fetch questions',
+            cause: error
+        });
+    }
+}),
 
     uploadMeeting: protectedProcedure.input(z.object({
         projectId: z.string(),

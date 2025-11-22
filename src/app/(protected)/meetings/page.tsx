@@ -9,7 +9,7 @@ import { Button } from '~/components/ui/button'
 import { toast } from 'sonner'
 import useRefetch from '~/hooks/use-refetch'
 import { NewMeetingModal } from './components/new-meeting-modal'
-import { Video } from 'lucide-react'
+import { Video, Upload } from 'lucide-react'
 
 const MeetingPage = () => {
     const {projectId}= useProject()
@@ -29,12 +29,17 @@ const MeetingPage = () => {
                     Record and analyze your meetings or start live video calls
                 </p>
             </div>
+            {/* Upload Meeting button moved to top right */}
             <Button 
-                onClick={() => setShowNewMeetingModal(true)}
+                onClick={() => {
+                    // Scroll to upload section
+                    document.getElementById('upload-section')?.scrollIntoView({ behavior: 'smooth' })
+                }}
+                variant="outline"
                 className="gap-2"
             >
-                <Video className="h-4 w-4" />
-                New Meeting
+                <Upload className="h-4 w-4" />
+                Upload Meeting
             </Button>
         </div>
 
@@ -43,7 +48,27 @@ const MeetingPage = () => {
             onOpenChange={setShowNewMeetingModal}
         />
 
-        <MeetingCard/>
+        {/* New Meeting button in central area */}
+        <div id="upload-section" className="flex flex-col items-center justify-center py-12 mb-8 border-2 border-dashed rounded-lg bg-muted/20">
+            <Video className="h-12 w-12 text-muted-foreground mb-4" />
+            <h2 className="text-lg font-semibold mb-2">Create a new meeting</h2>
+            <p className="text-sm text-muted-foreground mb-4 text-center max-w-md">
+                Analyse your meeting with GitChat.<br />
+                Powered by AI
+            </p>
+            <Button 
+                onClick={() => setShowNewMeetingModal(true)}
+                className="gap-2"
+                size="lg"
+            >
+                <Video className="h-5 w-5" />
+                New Meeting
+            </Button>
+        </div>
+
+        {/* Upload Meeting Card */}
+        
+
         <div className="h-6"></div>
         <h2 className='text-lg font-semibold mb-2'>Recorded Meetings</h2>
         <div className="h-1"></div>

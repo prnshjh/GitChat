@@ -1,8 +1,8 @@
 "use server"
 
 import { streamText } from "ai"
-import {createStreamableValue} from "ai/rsc"
-import {createGoogleGenerativeAI} from "@ai-sdk/google"
+import { createStreamableValue } from "ai/rsc"
+import { createGoogleGenerativeAI } from "@ai-sdk/google"
 import { generateEmbedding } from "~/lib/gemini"
 import { db } from "~/server/db"
 
@@ -10,73 +10,215 @@ const google = createGoogleGenerativeAI({
     apiKey: process.env.GEMINI_API_KEY,
 })
 
+interface SearchResult {
+    fileName: string
+    sourceCode: string
+    summary: string
+    similarity: number
+}
+
+/**
+ * Enhanced RAG query with improved retrieval
+ */
 export async function askQuestion(question: string, projectId: string) {
-    const stream = await createStreamableValue()
-    const queryVector = await generateEmbedding(question)
-    const vectorQuery = `[${queryVector.join(",")}]`
+    const stream = createStreamableValue()
+    
+    try {
+        // Step 1: Generate embedding
+        const queryVector = await generateEmbedding(question)
+        const vectorQuery = "[" + queryVector.join(",") + "]"
 
-    // Log the vector query for debugging
-    // console.log("Vector Query:", vectorQuery)
+        // Step 2: Retrieve more candidates with lower threshold
+        const candidates = await db.$queryRaw<SearchResult[]>`
+            SELECT 
+                "fileName", 
+                "sourceCode", 
+                "summary",
+                1 - ("summaryEmbedding" <=> ${vectorQuery}::vector) AS similarity
+            FROM "SourceCodeEmbedding"
+            WHERE 1 - ("summaryEmbedding" <=> ${vectorQuery}::vector) > 0.3
+            AND "projectId" = ${projectId}
+            ORDER BY similarity DESC 
+            LIMIT 30
+        `
 
-    const result = await db.$queryRaw`
-    SELECT "fileName", "sourceCode", "summary",
-    1-("summaryEmbedding" <=> ${vectorQuery}::vector) AS "similarity"
-    FROM "SourceCodeEmbedding"
-    WHERE 1-("summaryEmbedding" <=> ${vectorQuery}::vector) > 0.5
-    AND "projectId" = ${projectId}
-    ORDER BY "similarity" DESC 
-    LIMIT 10
-    ` as {
-        fileName: string 
-        sourceCode: string
-        summary: string
-    }[]
+        console.log(`Found ${candidates.length} candidate documents`)
 
-    // Log the result for debugging
-    // console.log("Query Result:", result)
+        // Step 3: Apply keyword boosting
+        const scoredResults = applyKeywordBoosting(candidates, question)
 
-    let context = ""
-    // console.log("context", context);
-    for (const doc of result){
-        context += `source: ${doc.fileName}\n code content: ${doc.sourceCode}\n summary of file: ${doc.summary} \n\n `
+        // Step 4: Select top results with diversity
+        const finalResults = selectDiverseResults(scoredResults, 15)
+
+        // Step 5: Build organized context
+        const context = buildContext(finalResults)
+
+        console.log(`Using ${finalResults.length} documents for context`)
+
+        // Step 6: Generate streaming response
+        ;(async () => {
+            const { textStream } = await streamText({
+                model: google("gemini-2.0-flash"),
+                prompt: buildPrompt(question, context),
+                temperature: 0.3,
+                maxTokens: 2000,
+            })
+
+            for await (const delta of textStream) {
+                stream.update(delta)
+            }
+
+            stream.done()
+        })()
+
+        return {
+            output: stream.value,
+            filesReferences: finalResults
+        }
+    } catch (error) {
+        console.error("Error in askQuestion:", error)
+        stream.error("Failed to process question")
+        throw error
     }
-    // console.log("context", context);
-    (async ()=>{
-        const {textStream} = await streamText({
-            model:google("gemini-2.0-flash"),
-            prompt: `
-            You are a AI code assistant who answers questions about the codebase. Your target  audience  is a technical intern who is new to the codebase.
-             AI assistant is a brand new, powerful, human-like artificial intelligence.
-      The traits of AI include expert knowledge, helpfulness, cleverness, and articulateness.
-      AI is a well-behaved and well-mannered individual.
-      AI is always friendly, kind, and inspiring, and he is eager to provide vivid and thoughtful responses to the user.
-      AI has the sum of all knowledge in their brain, and is able to accurately answer nearly any question about any topic in conversation.
-      If the question is asking about code or a specific file, AI will provide the detailed answer, giving step by step instructions, including code snippets.
-      START CONTEXT BLOCK
-      ${context}
-      END OF CONTEXT BLOCK
+}
 
-      START QUESTION
-      ${question}
-      END OF QUESTION
-      AI assistant will take into account any CONTEXT BLOCK that is provided in a conversation.
-      If the context does not provide the answer to question, the AI assistant will say, "I'm sorry, but I don't know the answer to that question".
-      AI assistant will not apologize for previous responses, but instead will indicated new information was gained.
-      AI assistant will not invent anything that is not drawn directly from the context.
-      Answer in markdown syntax, with code snippets if needed. Be as detailed as possible. when answering , make sure there is no code block in the response.
-      `,
-      
+/**
+ * Apply keyword-based boosting to results
+ */
+function applyKeywordBoosting(results: SearchResult[], question: string): SearchResult[] {
+    const questionLower = question.toLowerCase()
+    const keywords = questionLower.split(/\s+/).filter(w => w.length > 3)
+    
+    return results.map(result => {
+        let boost = 0
+        const fileNameLower = result.fileName.toLowerCase()
+        const summaryLower = result.summary.toLowerCase()
+        
+        // Boost for keyword matches in filename
+        keywords.forEach(keyword => {
+            if (fileNameLower.includes(keyword)) {
+                boost += 0.1
+            }
+            if (summaryLower.includes(keyword)) {
+                boost += 0.05
+            }
+        })
+        
+        // Boost for common patterns
+        if (questionLower.includes('api') && fileNameLower.includes('api')) {
+            boost += 0.15
+        }
+        if (questionLower.includes('component') && fileNameLower.includes('component')) {
+            boost += 0.15
+        }
+        if (questionLower.includes('auth') && fileNameLower.includes('auth')) {
+            boost += 0.15
+        }
+        if (questionLower.includes('database') && (fileNameLower.includes('db') || fileNameLower.includes('prisma'))) {
+            boost += 0.15
+        }
+        
+        // Prefer implementation files over config
+        if (!fileNameLower.includes('test') && !fileNameLower.includes('spec')) {
+            boost += 0.05
+        }
+        if (!fileNameLower.includes('.config.') && !fileNameLower.includes('package.json')) {
+            boost += 0.05
+        }
+        
+        return {
+            ...result,
+            similarity: Math.min(1, result.similarity + boost)
+        }
+    }).sort((a, b) => b.similarity - a.similarity)
+}
+
+/**
+ * Select diverse results to avoid redundancy
+ */
+function selectDiverseResults(results: SearchResult[], maxCount: number): SearchResult[] {
+    const selected: SearchResult[] = []
+    const directoryCounts = new Map<string, number>()
+    
+    for (const result of results) {
+        if (selected.length >= maxCount) break
+        
+        // Extract directory path
+        const parts = result.fileName.split('/')
+        const dir = parts.slice(0, -1).join('/') || 'root'
+        
+        // Limit files from same directory
+        const currentCount = directoryCounts.get(dir) || 0
+        if (currentCount >= 3) continue
+        
+        selected.push(result)
+        directoryCounts.set(dir, currentCount + 1)
+    }
+    
+    return selected
+}
+
+/**
+ * Build hierarchical context
+ */
+function buildContext(results: SearchResult[]): string {
+    const groupedByDir = new Map<string, SearchResult[]>()
+    
+    // Group by directory
+    results.forEach(result => {
+        const dir = result.fileName.split('/').slice(0, -1).join('/') || 'root'
+        if (!groupedByDir.has(dir)) {
+            groupedByDir.set(dir, [])
+        }
+        groupedByDir.get(dir)!.push(result)
     })
+    
+    // Build context string
+    let context = "# CODEBASE CONTEXT\n\n"
+    
+    groupedByDir.forEach((files, dir) => {
+        context += `## Directory: ${dir}\n\n`
+        
+        files.forEach(file => {
+            // Truncate very long code
+            const code = file.sourceCode.length > 3000 
+                ? file.sourceCode.substring(0, 3000) + "\n... [truncated]"
+                : file.sourceCode
+                
+            context += `### File: ${file.fileName}\n`
+            context += `**Summary:** ${file.summary}\n`
+            context += `**Relevance:** ${(file.similarity * 100).toFixed(1)}%\n\n`
+            context += "```\n"
+            context += code
+            context += "\n```\n\n"
+        })
+    })
+    
+    return context
+}
 
-    for await (const delta of textStream){
-        stream.update(delta)
-    }
+/**
+ * Build enhanced prompt
+ */
+function buildPrompt(question: string, context: string): string {
+    return `You are an expert senior software engineer helping developers understand this codebase.
 
-    stream.done()
-    })()
+## YOUR TASK
+Analyze the provided code context and answer the question accurately and comprehensively.
 
-    return {
-        output: stream.value,
-        filesRefrences: result
-    }
+## GUIDELINES
+1. Reference specific files when explaining (e.g., "In src/lib/github.ts, the function...")
+2. Provide code examples when helpful
+3. Explain clearly for developers who may be new to the codebase
+4. If the context doesn't fully answer the question, explain what's missing
+5. Suggest related files or areas to explore
+6. Be specific and actionable
+
+${context}
+
+## QUESTION
+${question}
+
+## YOUR ANSWER
+Provide a detailed, accurate answer based on the code context above:`
 }
