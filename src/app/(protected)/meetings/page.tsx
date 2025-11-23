@@ -30,17 +30,9 @@ const MeetingPage = () => {
                 </p>
             </div>
             {/* Upload Meeting button moved to top right */}
-            <Button 
-                onClick={() => {
-                    // Scroll to upload section
-                   <MeetingCard></MeetingCard>
-                }}
-                variant="outline"
-                className="gap-2"
-            >
-                <Upload className="h-4 w-4" />
-                Upload Meeting
-            </Button>
+            <MeetingCard >
+                
+            </MeetingCard>
         </div>
 
         <NewMeetingModal 

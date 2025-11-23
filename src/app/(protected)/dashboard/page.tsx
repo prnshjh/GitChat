@@ -9,7 +9,8 @@ import CommitLog from './commit-log';
 import DeleteButton from './delete-button';
 import InviteButton from './invite-button';
 import TeamMembers from './team-members';
-
+import RepoHealthCard from './repo-health-card';
+import ActivityFeedCard from './repo-feed';
 
 
 const page = () => {
@@ -53,8 +54,8 @@ const page = () => {
       <div className='mt-4'>
 
         <div className='grid grid-cols-1 gap-4 sm:grid-cols-5'>
-           <AskQuestionCard />
-           <MeetingCard/>
+           <AskQuestionCard/>
+           <RepoHealthCard/>
         </div>
       </div>
 
