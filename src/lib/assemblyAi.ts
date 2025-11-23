@@ -1,6 +1,4 @@
-// Start by making sure the `assemblyai` package is installed.
-// If not, you can install it by running the following command:
-// npm install assemblyai
+
 
 import { AssemblyAI } from 'assemblyai';
 
@@ -8,8 +6,6 @@ const client = new AssemblyAI({
   apiKey: process.env.ASSEMBLY_API_KEY || '',
 });
 
-// const FILE_URL =
-//   'https://assembly.ai/sports_injuries.mp3';
 
 function msToTime(ms:number){
     const seconds= ms/1000

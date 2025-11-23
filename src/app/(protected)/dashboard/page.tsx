@@ -15,12 +15,10 @@ import ActivityFeedCard from './repo-feed';
 
 const page = () => {
   const { project } = useProject();
-  // console.log("project",project)
-  // if(!project) return redirect('/create');
+
   return (
     <div>
-      {/* <h1 className='text-2xl font-bold'>{project?.name}</h1>
-      <div className='h-2'></div> */}
+      
 
 
       <div className='flex items-center justify-between flex-wrap gap-y-4'>

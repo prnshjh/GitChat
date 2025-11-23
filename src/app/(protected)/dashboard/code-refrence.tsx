@@ -20,7 +20,7 @@ const CodeRefrence = ({ filesRefrences }: Props) => {
   if (!filesRefrences || filesRefrences.length === 0) return null
 
   return (
-    // margin top + bottom around entire code card
+   
     <div className="max-w-[70vw] my-3">
       <Tabs value={tab} onValueChange={setTab}>
         {/* Tabs row */}
