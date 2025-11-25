@@ -21,14 +21,15 @@ export function AppSidebar(){
         title:"Q&A",
         url:"/qa",
         icon:Bot
+    },
+       {title:"Code",
+        url:"/code",
+        icon:Code
     },{
         title:"Meetings",
         url:"/meetings",
         icon:Presentation
-    },     {title:"Code",
-        url:"/code",
-        icon:Code
-    },{title:"Chat",
+    },  {title:"Chat",
         url:"/chat",
         icon:MessageCircle
     },
