@@ -85,9 +85,9 @@ export default function ModernCodeGenPage(): JSX.Element {
   // keep terminal visible until user closes it
   const [showTerminal, setShowTerminal] = useState<boolean>(false)
 
-  // Example project context (you can replace with your actual project selection/state)
+  
   const project = {
-    name: "UVA",
+    name: "This",
     repoUrl: "/mnt/data/92ac4836-7c2a-4381-8b92-d3fe2d34cdcf.png",
   }
 
