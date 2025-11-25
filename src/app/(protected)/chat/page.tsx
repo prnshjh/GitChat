@@ -41,23 +41,37 @@ const ChatPage = () => {
   const [activeChannel, setActiveChannel] = useState<any>(null)
   const [showSearch, setShowSearch] = useState(false)
 
+  // Keep the actual client instance in a ref so we can control init/cleanup
+  const clientRef = React.useRef<StreamChat | null>(null)
+
+  // Init Stream Chat client ONCE when all data needed is available
   useEffect(() => {
     if (!user || !projectId || !project || !teamMembers) return
 
+    // already initialized → do nothing
+    if (clientRef.current) return
+
     const initChat = async () => {
       try {
-        // Get Stream token
         const response = await fetch('/api/stream/token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: user.id })
+          body: JSON.stringify({
+            userId: user.id,
+            name: user.fullName || user.firstName || 'Anonymous',
+            image: user.imageUrl,
+          }),
         })
-        
+
         const { token } = await response.json()
 
-        // Initialize Stream Chat client
-        const client = StreamChat.getInstance(process.env.NEXT_PUBLIC_STREAM_API_KEY!)
-        
+        const client = StreamChat.getInstance(
+          process.env.NEXT_PUBLIC_STREAM_API_KEY!
+        )
+
+        // cache in ref
+        clientRef.current = client
+
         await client.connectUser(
           {
             id: user.id,
@@ -69,19 +83,24 @@ const ChatPage = () => {
 
         setChatClient(client)
         toast.success('Connected to team chat')
-
       } catch (error) {
         console.error('Chat initialization failed:', error)
         toast.error('Failed to connect to chat')
       }
     }
 
-    initChat()
-
-    return () => {
-      if (chatClient) chatClient.disconnectUser()
-    }
+    void initChat()
   }, [user, projectId, project, teamMembers])
+
+  // Disconnect ONLY when the component unmounts
+  useEffect(() => {
+    return () => {
+      if (clientRef.current) {
+        clientRef.current.disconnectUser()
+        clientRef.current = null
+      }
+    }
+  }, [])
 
   if (!chatClient) {
     return (
@@ -93,6 +112,9 @@ const ChatPage = () => {
       </div>
     )
   }
+
+  // ... rest of your component stays the same
+
 
   // Filter team members - exclude current user
   const otherMembers = teamMembers?.filter(m => m.userId !== user.id) || []
