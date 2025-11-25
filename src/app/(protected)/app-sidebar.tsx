@@ -1,6 +1,6 @@
 "use client"
 
-import { Bot, Code, CreditCard, LayoutDashboard, Plus, Presentation } from "lucide-react"
+import { Bot, Code, CreditCard, LayoutDashboard, MessageCircle, Plus, Presentation } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { Button } from "~/components/ui/button"
@@ -28,7 +28,11 @@ export function AppSidebar(){
     },     {title:"Code",
         url:"/code",
         icon:Code
-    },{
+    },{title:"Chat",
+        url:"/chat",
+        icon:MessageCircle
+    },
+    {
         title:"Billing",
         url:"/billing",
         icon:CreditCard
