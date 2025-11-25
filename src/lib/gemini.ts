@@ -1,19 +1,21 @@
-
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { Document } from "@langchain/core/documents";
- 
+
 // The SDK client will automatically look for GEMINI_API_KEY environment variable.
 const apiKey = process.env.GEMINI_API_KEY;
-const genAI = new GoogleGenerativeAI(apiKey as string);
- 
+if (!apiKey) {
+  throw new Error("GEMINI_API_KEY is not set");
+}
+
+const genAI = new GoogleGenerativeAI(apiKey);
+
 // The generative model remains "gemini-2.5-flash"
 const flashModel = genAI.getGenerativeModel({
   model: "gemini-2.5-flash",
 });
- 
 
 export const aiSummariseCommit = async (diff: string) => {
-  const response = await flashModel.generateContent([
+  const result = await flashModel.generateContent([
     `You are an expert programmer, and you are trying to summarize a git diff.
     Reminders about the git diff format:
     For every file, there are a few metadata lines, like (for example):
@@ -43,30 +45,32 @@ export const aiSummariseCommit = async (diff: string) => {
     because there were more than two relevant files in the hypothetical commit.
     Do not include parts of the example in your summary.
     It is given only as an example of appropriate comments.`,
-    `Please summarise the following diff file: \n\n${diff}`
-  ])
-  // Updated: Access response text using response.text
-  return response.text;
-}
- 
+    `Please summarise the following diff file: \n\n${diff}`,
+  ]);
+
+  // ✅ Correct way to access text
+  const text = result.response.text();
+  return text;
+};
 
 export async function summariseCode(doc: Document) {
   const code = doc.pageContent.slice(0, 10000);
-  console.log("summarise code ----------------------")
-  // console.log("source", doc.metadata);
+  console.log("summarise code ----------------------");
   console.log("source code:", code);
+
   try {
-    const response = await flashModel.generateContent([
+    const result = await flashModel.generateContent([
       `You are an intelligent senior software engineer who specializes in onboarding junior software engineers onto projects. 
       You are onboarding a junior software engineer and explaining to them the purpose of the ${doc.metadata.source} file.
       Here is the code:
       ---
       ${code}
       ---
-      Please provide a summary of the code above in no more than 100 words.`
+      Please provide a summary of the code above in no more than 100 words.`,
     ]);
-    // Updated: Access response text using response.text
-    return response.text;
+
+    // ✅ Correct way to access text
+    return result.response.text();
   } catch (error) {
     // console.error("Error generating content:", error);
     return "";
@@ -74,13 +78,10 @@ export async function summariseCode(doc: Document) {
 }
 
 export async function generateEmbedding(summary: string) {
-  // Using the model initialized in the function body, as in the original logic.
-  // Model name is already correct for the current recommended embedding model.
   const embeddingModel = genAI.getGenerativeModel({
-      model: "text-embedding-004",  
-  })
-  const result = await embeddingModel.embedContent(summary)
-  
-  // The structure is already correct: result.embedding.values
+    model: "text-embedding-004",
+  });
+
+  const result = await embeddingModel.embedContent(summary);
   return result.embedding.values;
 }
