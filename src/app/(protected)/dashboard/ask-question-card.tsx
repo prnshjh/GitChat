@@ -44,19 +44,30 @@ const AskQuestionCard = () => {
       return
     }
 
+    setLoading(true)
     setAnswer("")
     setFilesReferences([])
-    setLoading(true)
 
     try {
       const { output, filesReferences: refs } = await askQuestion(question, project.id)
 
       setFilesReferences(refs || [])
       setOpen(true)
+      setAnswer("") // ensure clean state after opening dialog
+
+      /**
+       * ✅ FIXED STREAM HANDLING
+       */
+      if (!output) {
+        throw new Error("No output stream received")
+      }
+
+      let fullAnswer = ""
 
       for await (const delta of readStreamableValue(output)) {
         if (delta) {
-          setAnswer((ans) => ans + delta)
+          fullAnswer += delta
+          setAnswer(fullAnswer)
         }
       }
 
@@ -100,7 +111,6 @@ const AskQuestionCard = () => {
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-[73vw] max-h-[90vh] overflow-auto py-4">
           <DialogHeader>
-            {/* 🔹 GitChat logo + Save button inline, like screenshot */}
             <div className="flex items-center gap-3">
               <DialogTitle>
                 <div className="flex items-center gap-2">
@@ -121,7 +131,7 @@ const AskQuestionCard = () => {
             </div>
           </DialogHeader>
 
-          {/* Answer Display */}
+          {/* Answer */}
           <div className="max-h-[30vh] overflow-auto mb-2">
             {answer ? (
               <MarkdownPreview
@@ -135,7 +145,9 @@ const AskQuestionCard = () => {
             ) : loading ? (
               <div className="flex items-center justify-center p-8">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
-                <span className="ml-3 text-muted-foreground">Generating answer...</span>
+                <span className="ml-3 text-muted-foreground">
+                  Generating answer...
+                </span>
               </div>
             ) : (
               <p className="text-muted-foreground p-4">No answer yet</p>
