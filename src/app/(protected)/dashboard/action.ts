@@ -1,4 +1,3 @@
-
 "use server";
 
 import { streamText } from "ai";
@@ -6,7 +5,7 @@ import { createStreamableValue } from "ai/rsc";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 
 /**
- * Lazy Google client
+ * ✅ Lazy Google client (NO top-level crash)
  */
 function getGoogle() {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -19,15 +18,14 @@ function getGoogle() {
 }
 
 /**
- * Demo Ask Function (NO DB, NO RAG)
+ * ✅ MAIN FUNCTION (name fixed → askQuestion)
  */
-export async function askQuestionSimple(question: string) {
+export async function askQuestion(question: string) {
   const stream = createStreamableValue("");
 
   try {
     const google = getGoogle();
 
-    // simple prompt
     const prompt = `
 You are a helpful AI assistant.
 
@@ -37,7 +35,9 @@ ${question}
 Answer clearly and concisely:
 `;
 
-    // streaming
+    /**
+     * ✅ Safe streaming (no silent crash)
+     */
     (async () => {
       try {
         const { textStream } = await streamText({
@@ -62,7 +62,7 @@ Answer clearly and concisely:
       output: stream.value,
     };
   } catch (error) {
-    console.error("askQuestionSimple error:", error);
+    console.error("askQuestion error:", error);
     stream.error("Failed to process question");
     throw error;
   }
